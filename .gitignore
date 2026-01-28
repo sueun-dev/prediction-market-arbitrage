@@ -1,0 +1,65 @@
+# Binaries
+arb
+arb-scanner
+arb_scanner
+test_ob
+bin/
+*.exe
+bench/bench_c
+bench/bench_cpp
+bench/bench_go
+bench/hft_bench_c
+bench/hft_bench_cpp
+bench/hft_bench_go
+
+# Output files
+arb_output.txt
+arb_stderr.txt
+*.log
+
+# Large data files (excluded due to GitHub file size limits)
+site/data/markets_full.json
+site/data/markets_view.json
+site/data/predict_markets_full.json
+site/data/predict_markets_view.json
+all_markets.json
+markets.json
+
+# Node
+node_modules/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / Secrets
+.env
+.env.local
+*.pem
+credentials.json
+
+# Agent configs (local only)
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.kiro/
+.opencode/
+.windsurf/
+skills/
+
+# Temp
+tmp/
+*.tmp
+
+# Rust build artifacts
+**/target/
+Cargo.lock

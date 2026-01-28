@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Predict Markets Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Work+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Cross-Market Hedge</p>
+          <h1>Predict.Fun × Polymarket Overlap</h1>
+          <p class="lede">
+            Only shows markets that match on both platforms so you can compare
+            Yes/No prices side by side.
+          </p>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <span class="stat-label">Pairs</span>
+            <strong id="stat-markets">0</strong>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Predict Bets</span>
+            <strong id="stat-bets">0</strong>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Avg Match</span>
+            <strong id="stat-spread">0%</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="controls">
+        <div class="control">
+          <label for="search">Search</label>
+          <input
+            id="search"
+            type="search"
+            placeholder="Search by question or category..."
+          />
+        </div>
+        <div class="control">
+          <label for="category">Category</label>
+          <select id="category"></select>
+        </div>
+        <div class="control">
+          <label for="sort">Sort</label>
+          <select id="sort">
+            <option value="match_desc">Best Match</option>
+            <option value="positions_desc">Predict Bets</option>
+            <option value="volume24_desc">Predict 24h Vol</option>
+            <option value="poly_volume24_desc">Polymarket 24h Vol</option>
+          </select>
+        </div>
+        <div class="control meta">
+          <span>Updated</span>
+          <strong id="generated-at">-</strong>
+          <div class="live-row">
+            <span id="live-dot" class="live-dot offline"></span>
+            <em id="stream-status" class="status offline">Offline</em>
+          </div>
+        </div>
+      </section>
+
+      <section id="market-grid" class="grid"></section>
+
+      <section class="pagination">
+        <div class="pagination-info">
+          <span>Showing</span>
+          <strong id="list-count">0</strong>
+        </div>
+        <button id="load-more" class="load-more" type="button">
+          Load more
+        </button>
+      </section>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
