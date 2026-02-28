@@ -27,27 +27,20 @@ Predict YES = $0.009 + Polymarket NO = $0.969 = $0.978 total
 
 ```bash
 # Build
-go build -o arb ./cmd/arb
+go build -o arb ./cmd/arb_scan
 
 # Run with dashboard
-./arb --pairs ./site/data/markets_pairs.json
+./arb
 
-# Run with JSON output (for logging)
-./arb --pairs ./site/data/markets_pairs.json --display json --min-profit 0
-
-# With Opinion API key
-./arb --pairs ./site/data/markets_pairs.json --opinion-api-key YOUR_KEY
+# Run with custom pairs file
+./arb ./site/data/markets_pairs.json
 ```
 
 ## Options
 
 ```
---pairs <path>          Path to markets_pairs.json (required)
---min-profit <bps>      Minimum net profit in basis points (default: 50 = 0.5%)
---display <mode>        dashboard, console, or json (default: dashboard)
---cooldown <ms>         Signal dedup cooldown (default: 5000)
---predict-fee <bps>     Predict taker fee (default: 200)
---poly-fee <bps>        Polymarket taker fee (default: 100)
+[pairs_path]            Optional path to markets_pairs.json
+                        (default: site/data/markets_pairs.json)
 ```
 
 ## Architecture
@@ -107,22 +100,20 @@ Predict YES = $0.009 + Polymarket NO = $0.969 = 총 $0.978
 
 ```bash
 # 빌드
-go build -o arb ./cmd/arb
+go build -o arb ./cmd/arb_scan
 
 # 대시보드 모드로 실행
-./arb --pairs ./site/data/markets_pairs.json
+./arb
 
-# JSON 출력 (로깅용)
-./arb --pairs ./site/data/markets_pairs.json --display json --min-profit 0
+# 다른 경로의 pairs 파일로 실행
+./arb ./site/data/markets_pairs.json
 ```
 
 ## 주요 옵션
 
 ```
---pairs <경로>          markets_pairs.json 경로 (필수)
---min-profit <bps>      최소 순이익 기준점 (기본값: 50 = 0.5%)
---display <모드>        dashboard, console, json (기본값: dashboard)
---cooldown <ms>         중복 신호 제거 간격 (기본값: 5000)
+[pairs_path]            markets_pairs.json 경로 (선택)
+                        (기본값: site/data/markets_pairs.json)
 ```
 
 ## 차익거래 전략
