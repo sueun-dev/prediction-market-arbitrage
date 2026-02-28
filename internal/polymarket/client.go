@@ -14,11 +14,11 @@ import (
 
 // ClientConfig holds Polymarket API configuration.
 type ClientConfig struct {
-	APIBase        string
-	PageSize       int
-	MaxMarkets     int
-	ActiveOnly     bool
-	AcceptingOnly  bool
+	APIBase       string
+	PageSize      int
+	MaxMarkets    int
+	ActiveOnly    bool
+	AcceptingOnly bool
 }
 
 // FetchMarkets fetches all markets from the Polymarket gamma API.
@@ -115,10 +115,10 @@ func FetchOrderbook(ctx context.Context, clobURL string, tokenID string) (*PolyB
 
 // PolyBookPayload is the raw orderbook response from CLOB.
 type PolyBookPayload struct {
-	Timestamp *int64           `json:"timestamp"`
-	Error     *string          `json:"error"`
-	Asks      []PolyBookRow    `json:"asks"`
-	Bids      []PolyBookRow    `json:"bids"`
+	Timestamp json.RawMessage `json:"timestamp"`
+	Error     *string         `json:"error"`
+	Asks      []PolyBookRow   `json:"asks"`
+	Bids      []PolyBookRow   `json:"bids"`
 }
 
 // PolyBookRow is a price/size level from CLOB.
@@ -177,8 +177,13 @@ func NormalizeBook(payload *PolyBookPayload, levels int) market.OrderbookView {
 		spreadCents = &sc
 	}
 
+	var timestamp *int64
+	if len(payload.Timestamp) > 0 {
+		timestamp = parseTimestamp(payload.Timestamp)
+	}
+
 	return market.OrderbookView{
-		UpdateTimestampMs: payload.Timestamp,
+		UpdateTimestampMs: timestamp,
 		BestAsk:           bestAsk,
 		BestBid:           bestBid,
 		Spread:            spread,
@@ -186,4 +191,20 @@ func NormalizeBook(payload *PolyBookPayload, levels int) market.OrderbookView {
 		Asks:              asks,
 		Bids:              bids,
 	}
+}
+
+func parseTimestamp(raw json.RawMessage) *int64 {
+	var n int64
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return &n
+	}
+
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil && s != "" {
+		if parsed, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return &parsed
+		}
+	}
+
+	return nil
 }
