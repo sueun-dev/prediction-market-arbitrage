@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -65,14 +66,32 @@ func NormalizeOrderbook(snapshot *OrderbookSnapshot) *market.OrderbookView {
 		return nil
 	}
 
-	asks := make([]market.OrderbookRow, len(snapshot.Asks))
-	for i, a := range snapshot.Asks {
-		asks[i] = market.OrderbookRow{Price: a[0], Size: a[1]}
+	normalizeRows := func(rows [][2]float64, isAsk bool) []market.OrderbookRow {
+		valid := make([]market.OrderbookRow, 0, len(rows))
+		for _, row := range rows {
+			p, s := row[0], row[1]
+			if math.IsNaN(p) || math.IsNaN(s) || math.IsInf(p, 0) || math.IsInf(s, 0) {
+				continue
+			}
+			if p <= 0 || p > 1 || s <= 0 {
+				continue
+			}
+			valid = append(valid, market.OrderbookRow{Price: p, Size: s})
+		}
+		sort.Slice(valid, func(i, j int) bool {
+			if valid[i].Price == valid[j].Price {
+				return valid[i].Size > valid[j].Size
+			}
+			if isAsk {
+				return valid[i].Price < valid[j].Price
+			}
+			return valid[i].Price > valid[j].Price
+		})
+		return valid
 	}
-	bids := make([]market.OrderbookRow, len(snapshot.Bids))
-	for i, b := range snapshot.Bids {
-		bids[i] = market.OrderbookRow{Price: b[0], Size: b[1]}
-	}
+
+	asks := normalizeRows(snapshot.Asks, true)
+	bids := normalizeRows(snapshot.Bids, false)
 
 	var bestAsk, bestBid, spread, spreadCents *float64
 	if len(asks) > 0 {

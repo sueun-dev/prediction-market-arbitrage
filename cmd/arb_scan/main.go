@@ -6,15 +6,23 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"predict-market/internal/market"
 )
 
 const (
-	predictTakerFeeBps    = 200.0
-	polymarketTakerFeeBps = 100.0
+	predictTakerFeeBps    int64 = 200
+	polymarketTakerFeeBps int64 = 100
+	priceScale            int64 = 1_000_000
+	bpsScale              int64 = 10_000
 )
+
+type ScanConfig struct {
+	MinNetBps    float64
+	MinFillRatio float64
+}
 
 // FillResult represents what happens when you try to fill a given USD amount
 // against an orderbook side.
@@ -94,16 +102,13 @@ func main() {
 
 	fmt.Fprintf(os.Stderr, "Loaded %d pairs (generated %s)\n\n", payload.Count, payload.GeneratedAt)
 
-	// Fee multipliers: when you BUY, you pay more; when you SELL, you receive less.
-	predictBuyMul := 1.0 + predictTakerFeeBps/10000.0   // 1.02
-	predictSellMul := 1.0 - predictTakerFeeBps/10000.0   // 0.98
-	polyBuyMul := 1.0 + polymarketTakerFeeBps/10000.0     // 1.01
-	polySellMul := 1.0 - polymarketTakerFeeBps/10000.0    // 0.99
+	scanCfg := loadScanConfig()
 
 	simSizes := []float64{100, 500, 1000, 5000}
 
 	var opps []ArbOpportunity
 	skippedMid := 0
+	totalChecks := 0
 
 	for _, pair := range payload.Pairs {
 		pp := pair.Pricing.Predict
@@ -181,18 +186,20 @@ func main() {
 			if pAsk.source == "mid" || mBid.source == "mid" {
 				skippedMid++
 			} else {
-				gross := mBid.value - pAsk.value
-				net := mBid.value*polySellMul - pAsk.value*predictBuyMul
-				if net > -0.03 {
+				totalChecks++
+				gross, net, netBps, ok := calcPerShareEdge(
+					pAsk.value, mBid.value, predictTakerFeeBps, polymarketTakerFeeBps,
+				)
+				if ok {
 					opp := ArbOpportunity{
 						PairID: pair.ID, Question: pair.Question,
 						Type: "YES_CROSS", BuyPlatform: "Predict", BuyPrice: pAsk.value,
 						SellPlatform: "Polymarket", SellPrice: mBid.value,
-						GrossProfit: gross, NetProfit: net, NetBps: net * 10000,
+						GrossProfit: gross, NetProfit: net, NetBps: netBps,
 						PredictLiq: pLiq, PolyLiq: mLiq,
 						BuyPriceSrc: pAsk.source, SellPriceSrc: mBid.source,
 					}
-					fillDepth(&opp, pAsks, mBids, predictBuyMul, polySellMul, simSizes)
+					fillDepth(&opp, pAsks, mBids, predictTakerFeeBps, polymarketTakerFeeBps, simSizes, scanCfg.MinFillRatio)
 					opps = append(opps, opp)
 				}
 			}
@@ -203,18 +210,20 @@ func main() {
 			if mAsk.source == "mid" || pBid.source == "mid" {
 				skippedMid++
 			} else {
-				gross := pBid.value - mAsk.value
-				net := pBid.value*predictSellMul - mAsk.value*polyBuyMul
-				if net > -0.03 {
+				totalChecks++
+				gross, net, netBps, ok := calcPerShareEdge(
+					mAsk.value, pBid.value, polymarketTakerFeeBps, predictTakerFeeBps,
+				)
+				if ok {
 					opp := ArbOpportunity{
 						PairID: pair.ID, Question: pair.Question,
 						Type: "YES_CROSS", BuyPlatform: "Polymarket", BuyPrice: mAsk.value,
 						SellPlatform: "Predict", SellPrice: pBid.value,
-						GrossProfit: gross, NetProfit: net, NetBps: net * 10000,
+						GrossProfit: gross, NetProfit: net, NetBps: netBps,
 						PredictLiq: pLiq, PolyLiq: mLiq,
 						BuyPriceSrc: mAsk.source, SellPriceSrc: pBid.source,
 					}
-					fillDepth(&opp, mAsks, pBids, polyBuyMul, predictSellMul, simSizes)
+					fillDepth(&opp, mAsks, pBids, polymarketTakerFeeBps, predictTakerFeeBps, simSizes, scanCfg.MinFillRatio)
 					opps = append(opps, opp)
 				}
 			}
@@ -234,9 +243,9 @@ func main() {
 		//   So we avoid double-counting by only showing YES_CROSS.
 	}
 
-	// Sort by net profit descending
+	// Sort by ROI (net bps) descending.
 	sort.Slice(opps, func(i, j int) bool {
-		return opps[i].NetProfit > opps[j].NetProfit
+		return opps[i].NetBps > opps[j].NetBps
 	})
 
 	green := "\033[32m"
@@ -249,7 +258,7 @@ func main() {
 
 	profitable := 0
 	for _, o := range opps {
-		if o.NetProfit > 0 {
+		if o.NetBps >= scanCfg.MinNetBps {
 			profitable++
 		}
 	}
@@ -258,10 +267,12 @@ func main() {
 	fmt.Printf("%s  ARB SCAN — YES CROSS ONLY (strict pricing)%s\n", bold, reset)
 	fmt.Printf("%s══════════════════════════════════════════════════════════════%s\n\n", bold, reset)
 	fmt.Printf("Pairs scanned:            %d\n", payload.Count)
-	fmt.Printf("Total arb checks:         %d\n", len(opps))
+	fmt.Printf("Actionable checks:        %d\n", totalChecks)
+	fmt.Printf("Candidate opportunities:  %d\n", len(opps))
 	fmt.Printf("Skipped (mid-price only): %d\n", skippedMid)
-	fmt.Printf("Profitable (net > 0 bps): %s%d%s\n", green, profitable, reset)
-	fmt.Printf("Fee model:                Predict %.0f bps | Polymarket %.0f bps\n", predictTakerFeeBps, polymarketTakerFeeBps)
+	fmt.Printf("Profitable (>= %.1f bps):  %s%d%s\n", scanCfg.MinNetBps, green, profitable, reset)
+	fmt.Printf("Fee model:                Predict %d bps | Polymarket %d bps\n", predictTakerFeeBps, polymarketTakerFeeBps)
+	fmt.Printf("Fill ratio threshold:     %.1f%%\n", scanCfg.MinFillRatio*100)
 	fmt.Printf("Logic:                    Buy YES @ ask on A, Sell YES @ bid on B\n\n")
 
 	if profitable == 0 {
@@ -273,18 +284,18 @@ func main() {
 			if shown >= 15 {
 				break
 			}
-			printOpp(o, shown+1, green, yellow, red, cyan, reset, bold, dim)
+			printOpp(o, shown+1, green, yellow, red, cyan, reset, bold, dim, scanCfg.MinNetBps)
 			shown++
 		}
 	} else {
 		fmt.Printf("%s── PROFITABLE (%d) ──%s\n\n", green, profitable, reset)
 		rank := 0
 		for _, o := range opps {
-			if o.NetProfit <= 0 {
+			if o.NetBps < scanCfg.MinNetBps {
 				break
 			}
 			rank++
-			printOpp(o, rank, green, yellow, red, cyan, reset, bold, dim)
+			printOpp(o, rank, green, yellow, red, cyan, reset, bold, dim, scanCfg.MinNetBps)
 		}
 	}
 
@@ -293,10 +304,10 @@ func main() {
 	fmt.Printf("%s  SUMMARY%s\n", bold, reset)
 	fmt.Printf("%s══════════════════════════════════════════════════════════════%s\n\n", bold, reset)
 
-	if len(opps) > 0 && opps[0].NetProfit > 0 {
-		fmt.Printf("Best net profit:  %s+%.2f%% (%.0f bps)%s\n", green, opps[0].NetProfit*100, opps[0].NetBps, reset)
+	if len(opps) > 0 && opps[0].NetBps >= scanCfg.MinNetBps {
+		fmt.Printf("Best net/share:   %s$%+.4f (%.0f bps)%s\n", green, opps[0].NetProfit, opps[0].NetBps, reset)
 	} else if len(opps) > 0 {
-		fmt.Printf("Best net profit:  %s%.2f%% (%.0f bps)%s  (not profitable)\n", red, opps[0].NetProfit*100, opps[0].NetBps, reset)
+		fmt.Printf("Best net/share:   %s$%+.4f (%.0f bps)%s  (below threshold)\n", red, opps[0].NetProfit, opps[0].NetBps, reset)
 	}
 	fmt.Printf("Profitable:       %d / %d\n", profitable, len(opps))
 
@@ -305,7 +316,7 @@ func main() {
 	obCount := 0
 	pricingCount := 0
 	for _, o := range opps {
-		if o.NetProfit <= 0 {
+		if o.NetBps < scanCfg.MinNetBps {
 			break
 		}
 		if o.BuyPriceSrc == "ob" || o.SellPriceSrc == "ob" {
@@ -322,22 +333,116 @@ func main() {
 	fmt.Printf("  Predict depth:                      full orderbook available\n")
 }
 
-func printOpp(o ArbOpportunity, rank int, green, yellow, red, cyan, reset, bold, dim string) {
+func loadScanConfig() ScanConfig {
+	cfg := ScanConfig{
+		MinNetBps:    envFloat("ARB_MIN_NET_BPS", 15),
+		MinFillRatio: envFloat("ARB_MIN_FILL_RATIO", 0.99),
+	}
+	if cfg.MinFillRatio <= 0 || cfg.MinFillRatio > 1 {
+		cfg.MinFillRatio = 0.99
+	}
+	return cfg
+}
+
+func calcPerShareEdge(buyPrice, sellPrice float64, buyFeeBps, sellFeeBps int64) (gross, net, netBps float64, ok bool) {
+	buyMicros, okBuy := priceToMicros(buyPrice)
+	sellMicros, okSell := priceToMicros(sellPrice)
+	if !okBuy || !okSell {
+		return 0, 0, 0, false
+	}
+
+	buyCostMicros := applyBpsRounded(buyMicros, bpsScale+buyFeeBps)
+	sellProceedsMicros := applyBpsRounded(sellMicros, bpsScale-sellFeeBps)
+	if buyCostMicros <= 0 {
+		return 0, 0, 0, false
+	}
+
+	grossMicros := sellMicros - buyMicros
+	netMicros := sellProceedsMicros - buyCostMicros
+
+	gross = microsToFloat(grossMicros)
+	net = microsToFloat(netMicros)
+	netBps = float64(netMicros) * float64(bpsScale) / float64(buyCostMicros)
+	return gross, net, netBps, true
+}
+
+func calcTradeNet(sellUSD, buyUSD float64, buyFeeBps, sellFeeBps int64) (netUSD, netBps float64, ok bool) {
+	sellMicros, okSell := amountToMicros(sellUSD)
+	buyMicros, okBuy := amountToMicros(buyUSD)
+	if !okSell || !okBuy || buyMicros <= 0 {
+		return 0, 0, false
+	}
+
+	buyCostMicros := applyBpsRounded(buyMicros, bpsScale+buyFeeBps)
+	sellProceedsMicros := applyBpsRounded(sellMicros, bpsScale-sellFeeBps)
+	if buyCostMicros <= 0 {
+		return 0, 0, false
+	}
+
+	netMicros := sellProceedsMicros - buyCostMicros
+	netUSD = microsToFloat(netMicros)
+	netBps = float64(netMicros) * float64(bpsScale) / float64(buyCostMicros)
+	return netUSD, netBps, true
+}
+
+func priceToMicros(v float64) (int64, bool) {
+	if math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > 1 {
+		return 0, false
+	}
+	return int64(math.Round(v * float64(priceScale))), true
+}
+
+func amountToMicros(v float64) (int64, bool) {
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+		return 0, false
+	}
+	if v > float64(math.MaxInt64)/(float64(priceScale)*float64(bpsScale)) {
+		return 0, false
+	}
+	return int64(math.Round(v * float64(priceScale))), true
+}
+
+func applyBpsRounded(value, bps int64) int64 {
+	if value == 0 || bps == 0 {
+		return 0
+	}
+	numerator := value * bps
+	if numerator >= 0 {
+		return (numerator + bpsScale/2) / bpsScale
+	}
+	return (numerator - bpsScale/2) / bpsScale
+}
+
+func microsToFloat(v int64) float64 {
+	return float64(v) / float64(priceScale)
+}
+
+func envFloat(name string, fallback float64) float64 {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func printOpp(o ArbOpportunity, rank int, green, yellow, red, cyan, reset, bold, dim string, minNetBps float64) {
 	color := green
-	if o.NetProfit <= 0 {
+	if o.NetBps < 0 {
 		color = red
-	} else if o.NetBps < 50 {
+	} else if o.NetBps < minNetBps {
 		color = yellow
 	}
 
-	netPct := o.NetProfit * 100
-	grossPct := o.GrossProfit * 100
 	minLiq := math.Min(o.PredictLiq, o.PolyLiq)
 
 	fmt.Printf("%s#%d %s [%s]%s\n", bold, rank, o.Type, o.PairID, reset)
 	fmt.Printf("  %s\"%s\"%s\n", dim, o.Question, reset)
-	fmt.Printf("  Net: %s%s%+.2f%%%s  Gross: %+.2f%%  |  %s%+.0f bps%s\n",
-		bold, color, netPct, reset, grossPct, color, o.NetBps, reset)
+	fmt.Printf("  Net/share: %s$%+.4f%s  Gross/share: $%+.4f  |  ROI: %s%+.0f bps%s\n",
+		color, o.NetProfit, reset, o.GrossProfit, color, o.NetBps, reset)
 	fmt.Printf("  BUY  %-25s @ %.4f  [%s]\n", o.BuyPlatform, o.BuyPrice, o.BuyPriceSrc)
 	fmt.Printf("  SELL %-25s @ %.4f  [%s]\n", o.SellPlatform, o.SellPrice, o.SellPriceSrc)
 	fmt.Printf("  Liquidity: Predict $%s | Poly $%s | Min $%s\n",
@@ -371,7 +476,7 @@ func printOpp(o ArbOpportunity, rank int, green, yellow, red, cyan, reset, bold,
 				fColor := green
 				if f.NetBps < 0 {
 					fColor = red
-				} else if f.NetBps < 50 {
+				} else if f.NetBps < minNetBps {
 					fColor = yellow
 				}
 				fmt.Printf("    $%-7s %-9.4f %-9.4f %-10.2f %s%-10.2f%s %s%+.0f%s\n",
@@ -509,7 +614,13 @@ func simulateSell(bids []market.OrderbookRow, shares float64) FillResult {
 }
 
 // fillDepth populates depth info and simulated fills for a cross arb.
-func fillDepth(opp *ArbOpportunity, buyAsks, sellBids []market.OrderbookRow, buyFeeMul, sellFeeMul float64, sizes []float64) {
+func fillDepth(
+	opp *ArbOpportunity,
+	buyAsks, sellBids []market.OrderbookRow,
+	buyFeeBps, sellFeeBps int64,
+	sizes []float64,
+	minFillRatio float64,
+) {
 	for _, lvl := range buyAsks {
 		if lvl.Price > 0 && lvl.Size > 0 {
 			opp.BuyDepthUSD += lvl.Price * lvl.Size
@@ -533,14 +644,14 @@ func fillDepth(opp *ArbOpportunity, buyAsks, sellBids []market.OrderbookRow, buy
 		sf := SimFill{SizeUSD: size}
 
 		buyResult := simulateBuy(buyAsks, size)
-		if buyResult.FilledShares == 0 || buyResult.FilledUSD < size*0.9 {
+		if buyResult.FilledShares == 0 || buyResult.FilledUSD < size*minFillRatio {
 			sf.Feasible = false
 			opp.Fills = append(opp.Fills, sf)
 			continue
 		}
 
 		sellResult := simulateSell(sellBids, buyResult.FilledShares)
-		if sellResult.FilledShares < buyResult.FilledShares*0.9 {
+		if sellResult.FilledShares < buyResult.FilledShares*minFillRatio {
 			sf.Feasible = false
 			opp.Fills = append(opp.Fills, sf)
 			continue
@@ -550,10 +661,14 @@ func fillDepth(opp *ArbOpportunity, buyAsks, sellBids []market.OrderbookRow, buy
 		sf.BuyVWAP = buyResult.VWAP
 		sf.SellVWAP = sellResult.VWAP
 		sf.GrossProfit = sellResult.FilledUSD - buyResult.FilledUSD
-		sf.NetProfit = sellResult.FilledUSD*sellFeeMul - buyResult.FilledUSD*buyFeeMul
-		if buyResult.FilledUSD > 0 {
-			sf.NetBps = (sf.NetProfit / buyResult.FilledUSD) * 10000
+		netUSD, netBps, ok := calcTradeNet(sellResult.FilledUSD, buyResult.FilledUSD, buyFeeBps, sellFeeBps)
+		if !ok {
+			sf.Feasible = false
+			opp.Fills = append(opp.Fills, sf)
+			continue
 		}
+		sf.NetProfit = netUSD
+		sf.NetBps = netBps
 		opp.Fills = append(opp.Fills, sf)
 	}
 }

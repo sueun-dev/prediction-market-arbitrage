@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -129,39 +131,41 @@ type PolyBookRow struct {
 
 // NormalizeBook converts a CLOB orderbook to a normalized view.
 func NormalizeBook(payload *PolyBookPayload, levels int) market.OrderbookView {
-	mapRow := func(r PolyBookRow) market.OrderbookRow {
-		p, _ := strconv.ParseFloat(r.Price, 64)
-		s, _ := strconv.ParseFloat(r.Size, 64)
-		return market.OrderbookRow{Price: p, Size: s}
-	}
-
-	filterValid := func(rows []market.OrderbookRow) []market.OrderbookRow {
-		var valid []market.OrderbookRow
+	normalizeRows := func(rows []PolyBookRow, isAsk bool) []market.OrderbookRow {
+		valid := make([]market.OrderbookRow, 0, len(rows))
 		for _, r := range rows {
-			if r.Price == r.Price && r.Size == r.Size { // NaN check
-				valid = append(valid, r)
+			p, errP := strconv.ParseFloat(r.Price, 64)
+			s, errS := strconv.ParseFloat(r.Size, 64)
+			if errP != nil || errS != nil {
+				continue
 			}
+			if math.IsNaN(p) || math.IsNaN(s) || math.IsInf(p, 0) || math.IsInf(s, 0) {
+				continue
+			}
+			if p <= 0 || p > 1 || s <= 0 {
+				continue
+			}
+			valid = append(valid, market.OrderbookRow{Price: p, Size: s})
+		}
+
+		sort.Slice(valid, func(i, j int) bool {
+			if valid[i].Price == valid[j].Price {
+				return valid[i].Size > valid[j].Size
+			}
+			if isAsk {
+				return valid[i].Price < valid[j].Price
+			}
+			return valid[i].Price > valid[j].Price
+		})
+
+		if levels > 0 && len(valid) > levels {
+			valid = valid[:levels]
 		}
 		return valid
 	}
 
-	asks := make([]market.OrderbookRow, len(payload.Asks))
-	for i, a := range payload.Asks {
-		asks[i] = mapRow(a)
-	}
-	asks = filterValid(asks)
-	if len(asks) > levels {
-		asks = asks[:levels]
-	}
-
-	bids := make([]market.OrderbookRow, len(payload.Bids))
-	for i, b := range payload.Bids {
-		bids[i] = mapRow(b)
-	}
-	bids = filterValid(bids)
-	if len(bids) > levels {
-		bids = bids[:levels]
-	}
+	asks := normalizeRows(payload.Asks, true)
+	bids := normalizeRows(payload.Bids, false)
 
 	var bestAsk, bestBid, spread, spreadCents *float64
 	if len(asks) > 0 {
