@@ -16,25 +16,25 @@ func makeMarket(id, question string, outcomes []string, source string) market.No
 		}
 	}
 	return market.NormalizedMarket{
-		ID:       id,
-		Question: question,
-		Outcomes: outs,
-		Source:   source,
-		Category: market.MarketCategory{Tags: []market.Tag{}},
+		ID:                   id,
+		Question:             question,
+		Outcomes:             outs,
+		Source:               source,
+		Category:             market.MarketCategory{Tags: []market.Tag{}},
 		BulletinBoardUpdates: []market.BulletinBoardUpdate{},
 	}
 }
 
 func defaultCfg() MatchConfig {
 	return MatchConfig{
-		MinSimilarity:              0.8,
-		MinCharSimilarity:          0.78,
-		MinMargin:                  0.08,
-		MinTokens:                  4,
-		RequireNumberMatch:         true,
-		RequireYearMatch:           true,
-		RequireMonthMatch:          true,
-		RequireSubjectMatch:        true,
+		MinSimilarity:               0.8,
+		MinCharSimilarity:           0.78,
+		MinMargin:                   0.08,
+		MinTokens:                   4,
+		RequireNumberMatch:          true,
+		RequireYearMatch:            true,
+		RequireMonthMatch:           true,
+		RequireSubjectMatch:         true,
 		RequireDescriptionDateMatch: true,
 	}
 }
@@ -67,6 +67,9 @@ func TestBuildPairsNoMatch(t *testing.T) {
 	pairs := BuildPairs(predict, poly, defaultCfg())
 	if len(pairs) != 0 {
 		t.Errorf("expected 0 pairs, got %d", len(pairs))
+	}
+	if pairs == nil {
+		t.Error("expected empty slice, got nil")
 	}
 }
 
@@ -133,21 +136,21 @@ func TestBuildPairsDescriptionDateMismatch(t *testing.T) {
 
 	predict := []market.NormalizedMarket{
 		{
-			ID:       "p1",
-			Question: "Will Trump nominate Kevin Warsh as the next Fed chair?",
-			Outcomes: []market.MarketOutcome{{ID: "p1_Yes", Name: "Yes", Index: 0}, {ID: "p1_No", Name: "No", Index: 1}},
-			Source:   "Predict.Fun",
-			Category: market.MarketCategory{Description: &predictDesc, Tags: []market.Tag{}},
+			ID:                   "p1",
+			Question:             "Will Trump nominate Kevin Warsh as the next Fed chair?",
+			Outcomes:             []market.MarketOutcome{{ID: "p1_Yes", Name: "Yes", Index: 0}, {ID: "p1_No", Name: "No", Index: 1}},
+			Source:               "Predict.Fun",
+			Category:             market.MarketCategory{Description: &predictDesc, Tags: []market.Tag{}},
 			BulletinBoardUpdates: []market.BulletinBoardUpdate{},
 		},
 	}
 	poly := []market.NormalizedMarket{
 		{
-			ID:       "poly1",
-			Question: "Will Trump nominate Kevin Warsh as the next Fed chair?",
-			Outcomes: []market.MarketOutcome{{ID: "poly1_Yes", Name: "Yes", Index: 0}, {ID: "poly1_No", Name: "No", Index: 1}},
-			Source:   "Polymarket",
-			Category: market.MarketCategory{Description: &polyDesc, Tags: []market.Tag{}},
+			ID:                   "poly1",
+			Question:             "Will Trump nominate Kevin Warsh as the next Fed chair?",
+			Outcomes:             []market.MarketOutcome{{ID: "poly1_Yes", Name: "Yes", Index: 0}, {ID: "poly1_No", Name: "No", Index: 1}},
+			Source:               "Polymarket",
+			Category:             market.MarketCategory{Description: &polyDesc, Tags: []market.Tag{}},
 			BulletinBoardUpdates: []market.BulletinBoardUpdate{},
 		},
 	}
@@ -196,14 +199,14 @@ func TestBuildPairsMarginFilter(t *testing.T) {
 	}
 
 	cfg := MatchConfig{
-		MinSimilarity:              0.5,
-		MinCharSimilarity:          0.5,
-		MinMargin:                  0.5, // Very high margin
-		MinTokens:                  3,
-		RequireNumberMatch:         false,
-		RequireYearMatch:           false,
-		RequireMonthMatch:          false,
-		RequireSubjectMatch:        false,
+		MinSimilarity:               0.5,
+		MinCharSimilarity:           0.5,
+		MinMargin:                   0.5, // Very high margin
+		MinTokens:                   3,
+		RequireNumberMatch:          false,
+		RequireYearMatch:            false,
+		RequireMonthMatch:           false,
+		RequireSubjectMatch:         false,
 		RequireDescriptionDateMatch: false,
 	}
 

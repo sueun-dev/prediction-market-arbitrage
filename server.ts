@@ -6,6 +6,12 @@ import {spawn, ChildProcess} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {
+  normalizePolymarketBook,
+  type NormalizedOrderbook,
+  type PolymarketBookPayload,
+} from './ts/polymarket_orderbook.js';
+
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const SITE_DIR = path.join(currentDir, 'site');
 const DATA_PATH = path.join(SITE_DIR, 'data', 'markets_pairs.json');
@@ -105,31 +111,6 @@ interface ServerCache {
 interface SseClient {
   res: ServerResponse;
   ping: ReturnType<typeof setInterval> | null;
-}
-
-interface NormalizedOrderbookRow {
-  price: number;
-  size: number;
-}
-
-interface NormalizedOrderbook {
-  updateTimestampMs: number | null;
-  orderCount: number | null;
-  lastOrderSettled: null;
-  bestAsk: number | null;
-  bestBid: number | null;
-  spread: number | null;
-  spreadCents: number | null;
-  asks: NormalizedOrderbookRow[];
-  bids: NormalizedOrderbookRow[];
-  settlementsPending: null;
-}
-
-interface PolymarketBookPayload {
-  timestamp?: number;
-  error?: string;
-  asks?: {price: string; size: string}[];
-  bids?: {price: string; size: string}[];
 }
 
 interface OrderbookCacheEntry {
@@ -253,52 +234,6 @@ const withConcurrency = async <T, R>(
 // Polymarket orderbook
 // ---------------------------------------------------------------------------
 
-const normalizePolymarketBook = (
-  payload: PolymarketBookPayload,
-): NormalizedOrderbook => {
-  const mapRow = (
-    row: {price: string; size: string},
-  ): NormalizedOrderbookRow => ({
-    price: Number(row.price),
-    size: Number(row.size),
-  });
-
-  const asks = (payload.asks ?? [])
-    .map(mapRow)
-    .filter(
-      (row) => Number.isFinite(row.price) && Number.isFinite(row.size),
-    )
-    .slice(0, POLYMARKET_ORDERBOOK_LEVELS);
-  const bids = (payload.bids ?? [])
-    .map(mapRow)
-    .filter(
-      (row) => Number.isFinite(row.price) && Number.isFinite(row.size),
-    )
-    .slice(0, POLYMARKET_ORDERBOOK_LEVELS);
-
-  const bestAsk = asks.length ? asks[0].price : null;
-  const bestBid = bids.length ? bids[0].price : null;
-  const spread =
-    bestAsk !== null && bestBid !== null
-      ? Number((bestAsk - bestBid).toFixed(6))
-      : null;
-  const spreadCents =
-    spread !== null ? Number((spread * 100).toFixed(4)) : null;
-
-  return {
-    updateTimestampMs: payload.timestamp ?? null,
-    orderCount: null,
-    lastOrderSettled: null,
-    bestAsk,
-    bestBid,
-    spread,
-    spreadCents,
-    asks,
-    bids,
-    settlementsPending: null,
-  };
-};
-
 const fetchPolymarketOrderbook = async (
   tokenId: string,
 ): Promise<NormalizedOrderbook> => {
@@ -320,7 +255,10 @@ const fetchPolymarketOrderbook = async (
     throw new Error(payload.error);
   }
 
-  const data = normalizePolymarketBook(payload);
+  const data = normalizePolymarketBook(
+    payload,
+    POLYMARKET_ORDERBOOK_LEVELS,
+  );
   orderbookCache.set(tokenId, {
     data,
     expiresAt: Date.now() + POLYMARKET_ORDERBOOK_TTL_MS,

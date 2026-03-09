@@ -13,7 +13,8 @@
     "fetch:predict": "tsx fetch_open_markets.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck",
+    "test:ts": "tsx --test ts/polymarket_orderbook.test.ts",
+    "check": "npm run typecheck && npm run test:ts",
     "dev": "tsx server.ts",
     "dev:server": "tsx server.ts",
     "start": "tsx server.ts"

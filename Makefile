@@ -16,7 +16,7 @@ test-go:
 	go test ./...
 
 test-ts:
-	npm run typecheck
+	npm run check
 
 check: test-go test-ts
 
