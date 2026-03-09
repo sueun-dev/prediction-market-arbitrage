@@ -73,7 +73,9 @@ func (s *Server) LoadCacheFromDisk() error {
 		Pairs       []interface{} `json:"pairs"`
 		Markets     []interface{} `json:"markets"`
 	}
-	json.Unmarshal(data, &parsed)
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return fmt.Errorf("parse cache data: %w", err)
+	}
 
 	count := parsed.Count
 	if count == 0 {
