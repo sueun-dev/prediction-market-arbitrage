@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"predict-market/internal/config"
 	"predict-market/internal/market"
 	"predict-market/internal/matcher"
 	"predict-market/internal/polymarket"
@@ -40,7 +41,7 @@ func main() {
 	// Env config
 	polyAPI := envOr("POLYMARKET_API", "https://gamma-api.polymarket.com")
 	polyPageSize := envInt("POLYMARKET_PAGE_SIZE", 100)
-	polyMaxMarkets := envInt("POLYMARKET_MAX_MARKETS", 0)
+	polyMaxMarkets := resolvePolymarketMaxMarkets(os.Args[1:])
 	polyActiveOnly := envBool("POLYMARKET_ACTIVE_ONLY", true)
 	polyAcceptingOnly := envBool("POLYMARKET_ACCEPTING_ONLY", true)
 	pairMinSimilarity := envFloat("PAIR_MIN_SIMILARITY", 0.8)
@@ -166,14 +167,14 @@ func main() {
 
 	// 7. Build pairs
 	matchCfg := matcher.MatchConfig{
-		MinSimilarity:      pairMinSimilarity,
-		MinCharSimilarity:  pairMinCharSimilarity,
-		MinMargin:          pairMinMargin,
-		MinTokens:          pairMinTokens,
-		RequireNumberMatch:  pairRequireNumberMatch,
-		RequireYearMatch:    pairRequireYearMatch,
-		RequireMonthMatch:          pairRequireMonthMatch,
-		RequireSubjectMatch:        pairRequireSubjectMatch,
+		MinSimilarity:               pairMinSimilarity,
+		MinCharSimilarity:           pairMinCharSimilarity,
+		MinMargin:                   pairMinMargin,
+		MinTokens:                   pairMinTokens,
+		RequireNumberMatch:          pairRequireNumberMatch,
+		RequireYearMatch:            pairRequireYearMatch,
+		RequireMonthMatch:           pairRequireMonthMatch,
+		RequireSubjectMatch:         pairRequireSubjectMatch,
 		RequireDescriptionDateMatch: pairRequireDescDateMatch,
 	}
 	pairs := matcher.BuildPairs(predictMarkets, polymarketMarkets, matchCfg)
@@ -209,6 +210,13 @@ func filterPredictArgs(argv []string) []string {
 		filtered = append(filtered, arg)
 	}
 	return filtered
+}
+
+func resolvePolymarketMaxMarkets(argv []string) int {
+	if v := os.Getenv("POLYMARKET_MAX_MARKETS"); v != "" {
+		return envInt("POLYMARKET_MAX_MARKETS", 0)
+	}
+	return config.ParseArgs(argv).MaxMarkets
 }
 
 func writeJSON(path string, payload interface{}) error {

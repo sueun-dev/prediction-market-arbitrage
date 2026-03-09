@@ -9,27 +9,27 @@ import (
 
 // MatchConfig holds pair matching configuration.
 type MatchConfig struct {
-	MinSimilarity             float64
-	MinCharSimilarity         float64
-	MinMargin                 float64
-	MinTokens                 int
-	RequireNumberMatch        bool
-	RequireYearMatch          bool
-	RequireMonthMatch         bool
-	RequireSubjectMatch       bool
+	MinSimilarity               float64
+	MinCharSimilarity           float64
+	MinMargin                   float64
+	MinTokens                   int
+	RequireNumberMatch          bool
+	RequireYearMatch            bool
+	RequireMonthMatch           bool
+	RequireSubjectMatch         bool
 	RequireDescriptionDateMatch bool
 }
 
 type polyIndexEntry struct {
-	market   market.NormalizedMarket
-	tokens   map[string]bool
-	bigrams  map[string]bool
-	numbers  map[string]bool
-	years    map[string]bool
-	months   map[string]bool
-	subject  map[string]bool
+	market    market.NormalizedMarket
+	tokens    map[string]bool
+	bigrams   map[string]bool
+	numbers   map[string]bool
+	years     map[string]bool
+	months    map[string]bool
+	subject   map[string]bool
 	descDates map[string]bool
-	yesNo    YesNoOutcomes
+	yesNo     YesNoOutcomes
 }
 
 type scoredCandidate struct {
@@ -74,7 +74,7 @@ func BuildPairs(
 	}
 
 	usedPoly := make(map[string]bool)
-	var pairs []market.MarketPair
+	pairs := make([]market.MarketPair, 0)
 
 	for _, predict := range predictMarkets {
 		names := outcomeNames(predict.Outcomes)

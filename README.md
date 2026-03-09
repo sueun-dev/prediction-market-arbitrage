@@ -75,6 +75,17 @@ This produces:
 ./bin/fetch_all_markets
 ```
 
+Quick smoke run with bounded live data:
+
+```bash
+POLYMARKET_MAX_MARKETS=1 ./bin/fetch_all_markets \
+  --max-markets 1 \
+  --skip-orderbook \
+  --skip-holders \
+  --skip-comments \
+  --skip-timeseries
+```
+
 Generated files land under `site/data/`:
 
 - `predict_markets_full.json`
@@ -135,6 +146,12 @@ Run type-only verification:
 npm run typecheck
 ```
 
+Run the TypeScript normalization tests:
+
+```bash
+npm run test:ts
+```
+
 `npm run build` emits compiled files into `dist/`, which is intentionally ignored by Git.
 
 ## Verification
@@ -155,7 +172,7 @@ TypeScript check:
 
 ```bash
 npm ci
-npm run typecheck
+npm run check
 ```
 
 Unified local check:
@@ -187,6 +204,9 @@ Polymarket orderbook proxy:
 - `POLYMARKET_ORDERBOOK_CONCURRENCY`
 - `POLYMARKET_ORDERBOOK_LEVELS`
 - `POLYMARKET_ORDERBOOK_MAX_TOKENS`
+- `POLYMARKET_MAX_MARKETS`
+
+`fetch_all_markets --max-markets N` now limits Predict.fun input and, unless `POLYMARKET_MAX_MARKETS` is explicitly set, applies the same cap to the Polymarket side for smoke tests and small-batch runs.
 
 ## Notes
 
