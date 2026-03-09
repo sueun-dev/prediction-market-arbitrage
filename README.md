@@ -181,6 +181,12 @@ Unified local check:
 make check
 ```
 
+Bounded live smoke:
+
+```bash
+make smoke-live
+```
+
 ## Useful environment variables
 
 Scanner:

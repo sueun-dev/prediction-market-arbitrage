@@ -1,4 +1,4 @@
-.PHONY: all build test test-go test-ts check clean
+.PHONY: all build test test-go test-ts check smoke-live clean
 
 BINDIR := bin
 
@@ -19,6 +19,9 @@ test-ts:
 	npm run check
 
 check: test-go test-ts
+
+smoke-live:
+	./scripts/live_smoke.sh
 
 clean:
 	rm -rf $(BINDIR)

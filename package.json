@@ -13,7 +13,7 @@
     "fetch:predict": "tsx fetch_open_markets.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test:ts": "tsx --test ts/polymarket_orderbook.test.ts",
+    "test:ts": "tsx --test ts/polymarket_orderbook.test.ts ts/cli_args.test.ts ts/pair_match_rules.test.ts",
     "check": "npm run typecheck && npm run test:ts",
     "dev": "tsx server.ts",
     "dev:server": "tsx server.ts",
