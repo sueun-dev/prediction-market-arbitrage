@@ -13,14 +13,18 @@ func TestServeMarketsETag(t *testing.T) {
 	tmpDir := t.TempDir()
 	dataPath := filepath.Join(tmpDir, "data.json")
 	data := `{"generatedAt":"2025-01-01T00:00:00.000Z","count":1,"pairs":[]}`
-	os.WriteFile(dataPath, []byte(data), 0o644)
+	if err := os.WriteFile(dataPath, []byte(data), 0o644); err != nil {
+		t.Fatalf("write data file: %v", err)
+	}
 
 	srv := NewServer(ServerConfig{
 		DataPath: dataPath,
 		SiteDir:  tmpDir,
 		PolyBook: PolyBookConfig{MaxTokens: 6, Levels: 8, Concurrency: 1},
 	})
-	srv.LoadCacheFromDisk()
+	if err := srv.LoadCacheFromDisk(); err != nil {
+		t.Fatalf("LoadCacheFromDisk: %v", err)
+	}
 
 	// First request - should return 200
 	req := httptest.NewRequest("GET", "/api/markets", nil)
@@ -60,7 +64,9 @@ func TestServeStatus(t *testing.T) {
 	}
 
 	var body map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &body)
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode status response: %v", err)
+	}
 	if body["updating"] != false {
 		t.Errorf("updating = %v, want false", body["updating"])
 	}
@@ -87,7 +93,9 @@ func TestRefreshWhileBusy(t *testing.T) {
 
 func TestServeStaticFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "index.html"), []byte("<html></html>"), 0o644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "index.html"), []byte("<html></html>"), 0o644); err != nil {
+		t.Fatalf("write static file: %v", err)
+	}
 
 	srv := NewServer(ServerConfig{
 		SiteDir:  tmpDir,
@@ -176,9 +184,29 @@ func TestPolymarketOrderbookMissingToken(t *testing.T) {
 	}
 
 	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode orderbook error response: %v", err)
+	}
 	if body["error"] != "token_ids is required" {
 		t.Errorf("error = %q", body["error"])
+	}
+}
+
+func TestLoadCacheFromDiskRejectsInvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	dataPath := filepath.Join(tmpDir, "data.json")
+	if err := os.WriteFile(dataPath, []byte("{invalid json"), 0o644); err != nil {
+		t.Fatalf("write invalid data file: %v", err)
+	}
+
+	srv := NewServer(ServerConfig{
+		DataPath: dataPath,
+		SiteDir:  tmpDir,
+		PolyBook: PolyBookConfig{MaxTokens: 6, Levels: 8, Concurrency: 1},
+	})
+
+	if err := srv.LoadCacheFromDisk(); err == nil {
+		t.Fatal("LoadCacheFromDisk should fail for invalid JSON")
 	}
 }
 

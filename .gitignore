@@ -27,6 +27,7 @@ markets.json
 
 # Node
 node_modules/
+dist/
 
 # IDE / Editor
 .vscode/

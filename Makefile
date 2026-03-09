@@ -1,4 +1,4 @@
-.PHONY: all build test clean
+.PHONY: all build test test-go test-ts check clean
 
 BINDIR := bin
 
@@ -10,8 +10,15 @@ build:
 	go build -o $(BINDIR)/server ./cmd/server
 	go build -o $(BINDIR)/arb ./cmd/arb_scan
 
-test:
+test: check
+
+test-go:
 	go test ./...
+
+test-ts:
+	npm run typecheck
+
+check: test-go test-ts
 
 clean:
 	rm -rf $(BINDIR)

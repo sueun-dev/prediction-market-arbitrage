@@ -1,142 +1,195 @@
-# Prediction Market Arbitrage Scanner
+# predict-market-arb
 
-Real-time cross-platform arbitrage scanner for prediction markets. Detects risk-free profit opportunities by finding price discrepancies between platforms.
+Prediction market arbitrage tooling focused on **Predict.fun** and **Polymarket**. The repository contains:
 
-## What This Does
+- Go binaries for fetching market data, building cross-market pairs, serving a dashboard, and scanning arb opportunities
+- TypeScript utilities for local data fetching and a lightweight dev server
+- Static dashboard assets under `site/`
 
-Monitors multiple prediction market platforms simultaneously and alerts when you can buy YES on one platform + NO on another for less than $1 total. Since one outcome will always pay $1 at settlement, this locks in guaranteed profit.
+## Current scope
 
-**Example opportunity detected:**
+The live implementation in this repository currently supports:
+
+| Platform | Data source | Status |
+| --- | --- | --- |
+| Predict.fun | GraphQL + WebSocket orderbook snapshot flow | Implemented |
+| Polymarket | Gamma API + CLOB orderbook proxy | Implemented |
+
+Other platforms mentioned in older notes are **not implemented in the current codebase**.
+
+## Repo layout
+
+```text
+cmd/
+  arb_scan/           # CLI scanner for profitable YES cross opportunities
+  fetch_open_markets/ # Fetch Predict.fun markets
+  fetch_all_markets/  # Combine Predict.fun + Polymarket and build pairs
+  server/             # Go HTTP dashboard server
+  ws_debug/           # Debug utility for raw websocket streams
+
+internal/
+  config/             # CLI/config parsing helpers
+  market/             # Shared market and payload types
+  matcher/            # Pairing and text-matching logic
+  polymarket/         # Polymarket client + normalization
+  predict/            # Predict.fun client + normalization
+  server/             # Dashboard HTTP/SSE server
+  worker/             # Bounded concurrency helpers
+
+site/
+  data/               # Generated JSON payloads
+  index.html          # Static dashboard
+
+*.ts                  # TypeScript fetch/server utilities
 ```
-Predict YES = $0.009 + Polymarket NO = $0.969 = $0.978 total
-→ Net profit: 1.21% (after fees)
-```
 
-## Supported Platforms
+## Arbitrage model
 
-| Platform | Connection | Fee |
-|----------|-----------|-----|
-| Predict.fun | WebSocket | 2% |
-| Polymarket | WebSocket | 1% |
-| Opinion.Trade | REST Polling | 0.5% |
-| Drift BET | WebSocket | 0.5% |
-| Myriad Markets | REST Polling | 1% |
-| SX Bet | REST Polling | 1% |
+The scanner looks for executable **YES cross** opportunities:
 
-## Getting Started
+- buy YES on venue A at the best ask
+- sell YES on venue B at the best bid
+- subtract taker fees
+- reject mid-price-only inputs that are not actually executable
+
+This avoids double-counting complement-style math and keeps the output aligned with actionable orderbook prices.
+
+## Quick start
+
+### 1. Build the Go binaries
 
 ```bash
-# Build
-go build -o arb ./cmd/arb_scan
-
-# Run with dashboard
-./arb
-
-# Run with custom pairs file
-./arb ./site/data/markets_pairs.json
+make build
 ```
 
-## Options
+This produces:
 
-```
-[pairs_path]            Optional path to markets_pairs.json
-                        (default: site/data/markets_pairs.json)
-```
+- `bin/fetch_open_markets`
+- `bin/fetch_all_markets`
+- `bin/server`
+- `bin/arb`
 
-## Architecture
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Predict WS │     │ Polymarket  │     │   Opinion   │
-│             │     │     WS      │     │   Poller    │
-└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-       │                   │                   │
-       └───────────────────┴───────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │   Engine    │  ← Arbitrage detection
-                    │ (goroutine) │
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │  Dashboard  │  ← Real-time display
-                    └─────────────┘
-```
-
-## Tech Stack
-
-- **Go** - High-performance concurrent processing
-- **gorilla/websocket** - Real-time price feeds
-- **Channel-based architecture** - Lock-free message passing
-
----
-
-# 예측 마켓 차익거래 스캐너
-
-여러 예측 마켓 플랫폼 간의 가격 차이를 실시간으로 감지하는 무위험 차익거래 스캐너입니다.
-
-## 작동 원리
-
-여러 플랫폼을 동시에 모니터링하여 **A 플랫폼 YES + B 플랫폼 NO < $1** 인 경우를 찾습니다. 만기 시 둘 중 하나는 반드시 $1이 되므로, 진입 비용이 $1 미만이면 무위험 수익이 확정됩니다.
-
-**실제 감지된 기회:**
-```
-Predict YES = $0.009 + Polymarket NO = $0.969 = 총 $0.978
-→ 순수익: 1.21% (수수료 차감 후)
-```
-
-## 지원 플랫폼
-
-| 플랫폼 | 연결 방식 | 수수료 |
-|--------|----------|--------|
-| Predict.fun | WebSocket | 2% |
-| Polymarket | WebSocket | 1% |
-| Opinion.Trade | REST 폴링 | 0.5% |
-| Drift BET | WebSocket | 0.5% |
-| Myriad Markets | REST 폴링 | 1% |
-| SX Bet | REST 폴링 | 1% |
-
-## 빠른 시작
+### 2. Generate market data
 
 ```bash
-# 빌드
-go build -o arb ./cmd/arb_scan
-
-# 대시보드 모드로 실행
-./arb
-
-# 다른 경로의 pairs 파일로 실행
-./arb ./site/data/markets_pairs.json
+./bin/fetch_all_markets
 ```
 
-## 주요 옵션
+Generated files land under `site/data/`:
 
-```
-[pairs_path]            markets_pairs.json 경로 (선택)
-                        (기본값: site/data/markets_pairs.json)
-```
+- `predict_markets_full.json`
+- `predict_markets_view.json`
+- `markets_full.json`
+- `markets_view.json`
+- `markets_pairs.json`
 
-## 차익거래 전략
+### 3. Run the scanner
 
-```
-크로스 플랫폼 보완 전략 (Cross-Platform Complement)
-
-조건: Platform_A의 YES Ask + Platform_B의 NO Ask < $1
-
-예시:
-  Predict YES Ask  = $0.40
-  Polymarket NO Ask = $0.55
-  총 비용           = $0.95
-
-만기 시:
-  - YES 승리 → YES=$1, NO=$0 → 수익 $0.05
-  - NO 승리  → YES=$0, NO=$1 → 수익 $0.05
-
-→ 결과에 관계없이 $0.05 확정 수익 (5.26% 수익률)
+```bash
+./bin/arb
 ```
 
-## 기술 스택
+Or pass a custom pairs file:
 
-- **Go** - 고성능 동시성 처리
-- **gorilla/websocket** - 실시간 가격 피드
-- **채널 기반 아키텍처** - 락 없는 메시지 패싱
+```bash
+./bin/arb ./site/data/markets_pairs.json
+```
+
+### 4. Run the Go dashboard server
+
+```bash
+./bin/server
+```
+
+Default server URL:
+
+```text
+http://localhost:8050
+```
+
+## TypeScript utilities
+
+The TypeScript files are useful for local development and debugging.
+
+Install dependencies:
+
+```bash
+npm ci
+```
+
+Run the dev server:
+
+```bash
+npm run dev
+```
+
+Compile TypeScript output:
+
+```bash
+npm run build
+```
+
+Run type-only verification:
+
+```bash
+npm run typecheck
+```
+
+`npm run build` emits compiled files into `dist/`, which is intentionally ignored by Git.
+
+## Verification
+
+Go tests:
+
+```bash
+go test ./...
+```
+
+Go build:
+
+```bash
+go build ./...
+```
+
+TypeScript check:
+
+```bash
+npm ci
+npm run typecheck
+```
+
+Unified local check:
+
+```bash
+make check
+```
+
+## Useful environment variables
+
+Scanner:
+
+- `ARB_MIN_NET_BPS`
+- `ARB_MIN_FILL_RATIO`
+
+Dashboard / refresh loop:
+
+- `PORT`
+- `REFRESH_INTERVAL_MS`
+- `SSE_PING_MS`
+- `AUTO_REFRESH`
+- `FETCH_CONCURRENCY`
+- `CATEGORY_CONCURRENCY`
+
+Polymarket orderbook proxy:
+
+- `POLYMARKET_CLOB_URL`
+- `POLYMARKET_ORDERBOOK_TTL_MS`
+- `POLYMARKET_ORDERBOOK_CONCURRENCY`
+- `POLYMARKET_ORDERBOOK_LEVELS`
+- `POLYMARKET_ORDERBOOK_MAX_TOKENS`
+
+## Notes
+
+- The Go server reads `site/data/markets_pairs.json` by default.
+- `site/data/*.json` is runtime data, not a source of truth.
+- If the cached JSON is malformed, the server now rejects it instead of silently serving invalid metadata.
