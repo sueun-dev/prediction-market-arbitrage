@@ -3,6 +3,17 @@ import {spawn, ChildProcess} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {
+  filterPredictArgs,
+  resolvePolymarketMaxMarkets,
+} from './ts/cli_args.js';
+import {
+  extractMonths,
+  extractResolutionDates,
+  extractSubject,
+  setsEqual,
+} from './ts/pair_match_rules.js';
+
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(currentDir, 'site', 'data');
 const PREDICT_FULL = path.join(DATA_DIR, 'predict_markets_full.json');
@@ -14,8 +25,9 @@ const PAIRS_OUT = path.join(DATA_DIR, 'markets_pairs.json');
 const POLYMARKET_API =
   process.env.POLYMARKET_API || 'https://gamma-api.polymarket.com';
 const POLYMARKET_PAGE_SIZE = Number(process.env.POLYMARKET_PAGE_SIZE || 100);
-const POLYMARKET_MAX_MARKETS = Number(
-  process.env.POLYMARKET_MAX_MARKETS || 0,
+const POLYMARKET_MAX_MARKETS = resolvePolymarketMaxMarkets(
+  process.argv.slice(2),
+  process.env.POLYMARKET_MAX_MARKETS,
 );
 const POLYMARKET_ACTIVE_ONLY = process.env.POLYMARKET_ACTIVE_ONLY !== '0';
 const POLYMARKET_ACCEPTING_ONLY =
@@ -29,6 +41,12 @@ const PAIR_MIN_TOKENS = Number(process.env.PAIR_MIN_TOKENS || 4);
 const PAIR_REQUIRE_NUMBER_MATCH =
   process.env.PAIR_REQUIRE_NUMBER_MATCH !== '0';
 const PAIR_REQUIRE_YEAR_MATCH = process.env.PAIR_REQUIRE_YEAR_MATCH !== '0';
+const PAIR_REQUIRE_MONTH_MATCH =
+  process.env.PAIR_REQUIRE_MONTH_MATCH !== '0';
+const PAIR_REQUIRE_SUBJECT_MATCH =
+  process.env.PAIR_REQUIRE_SUBJECT_MATCH !== '0';
+const PAIR_REQUIRE_DESC_DATE_MATCH =
+  process.env.PAIR_REQUIRE_DESC_DATE_MATCH !== '0';
 
 // ---------------------------------------------------------------------------
 // Shared types imported from fetch_open_markets.ts conceptually.
@@ -539,23 +557,6 @@ const fetchPredictMarkets = (argv: string[]): Promise<void> =>
     });
   });
 
-const filterPredictArgs = (argv: string[]): string[] => {
-  const filtered: string[] = [];
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg.startsWith('--full-out')) {
-      if (!arg.includes('=')) i += 1;
-      continue;
-    }
-    if (arg.startsWith('--out')) {
-      if (!arg.includes('=')) i += 1;
-      continue;
-    }
-    filtered.push(arg);
-  }
-  return filtered;
-};
-
 // ---------------------------------------------------------------------------
 // Polymarket normalization & fetch
 // ---------------------------------------------------------------------------
@@ -741,6 +742,9 @@ interface PolyIndexEntry {
   bigrams: Set<string>;
   numbers: Set<string>;
   years: Set<string>;
+  months: Set<string>;
+  subject: Set<string>;
+  descDates: Set<string>;
   yesNo: YesNoOutcomes;
 }
 
@@ -760,12 +764,16 @@ const buildPairs = (
       const question = market.question ?? '';
       const tokens = tokenSet(question);
       if (tokens.size < PAIR_MIN_TOKENS) return null;
+      const desc = market.category.description ?? '';
       return {
         market,
         tokens,
         bigrams: bigramSet(question),
         numbers: extractNumbers(question),
         years: extractYears(question),
+        months: extractMonths(question),
+        subject: extractSubject(question),
+        descDates: extractResolutionDates(desc),
         yesNo,
       };
     })
@@ -783,6 +791,11 @@ const buildPairs = (
     const predictBigrams = bigramSet(question);
     const predictNumbers = extractNumbers(question);
     const predictYears = extractYears(question);
+    const predictMonths = extractMonths(question);
+    const predictSubject = extractSubject(question);
+    const predictDescDates = extractResolutionDates(
+      predict.category.description ?? '',
+    );
 
     let best: ScoredCandidate | null = null;
     let second: ScoredCandidate | null = null;
@@ -802,6 +815,36 @@ const buildPairs = (
         predictNumbers.size &&
         entry.numbers.size &&
         !hasOverlap(predictNumbers, entry.numbers)
+      ) {
+        continue;
+      }
+      if (PAIR_REQUIRE_MONTH_MATCH) {
+        const predictHasMonth = predictMonths.size > 0;
+        const entryHasMonth = entry.months.size > 0;
+        if (predictHasMonth !== entryHasMonth) {
+          continue;
+        }
+        if (
+          predictHasMonth &&
+          entryHasMonth &&
+          !setsEqual(predictMonths, entry.months)
+        ) {
+          continue;
+        }
+      }
+      if (
+        PAIR_REQUIRE_SUBJECT_MATCH &&
+        predictSubject.size &&
+        entry.subject.size &&
+        !setsEqual(predictSubject, entry.subject)
+      ) {
+        continue;
+      }
+      if (
+        PAIR_REQUIRE_DESC_DATE_MATCH &&
+        predictDescDates.size &&
+        entry.descDates.size &&
+        !setsEqual(predictDescDates, entry.descDates)
       ) {
         continue;
       }
