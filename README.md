@@ -1,4 +1,6 @@
-# predict-market-arb
+# Prediction Market Arbitrage
+
+Cross-venue prediction market arbitrage tooling for executable YES order flow between Predict.fun and Polymarket.
 
 Prediction market arbitrage tooling focused on **Predict.fun** and **Polymarket**. The repository contains:
 
