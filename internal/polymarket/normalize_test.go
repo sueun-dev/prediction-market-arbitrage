@@ -7,14 +7,14 @@ import (
 
 func TestNormalizeMarketBasic(t *testing.T) {
 	raw := RawMarket{
-		ID:       "test123",
-		Question: strPtr("Will Bitcoin reach $100k?"),
-		Outcomes: json.RawMessage(`["Yes", "No"]`),
-		OutcomePrices: json.RawMessage(`["0.65", "0.35"]`),
-		ClobTokenIds: json.RawMessage(`["tok1", "tok2"]`),
-		Active:       boolPtr(true),
+		ID:              "test123",
+		Question:        strPtr("Will Bitcoin reach $100k?"),
+		Outcomes:        json.RawMessage(`["Yes", "No"]`),
+		OutcomePrices:   json.RawMessage(`["0.65", "0.35"]`),
+		ClobTokenIds:    json.RawMessage(`["tok1", "tok2"]`),
+		Active:          boolPtr(true),
 		AcceptingOrders: boolPtr(true),
-		Slug:         strPtr("bitcoin-100k"),
+		Slug:            strPtr("bitcoin-100k"),
 	}
 
 	m := NormalizeMarket(raw)
@@ -100,5 +100,50 @@ func TestNormalizeMarketMissingFields(t *testing.T) {
 	}
 }
 
+// #5: bestBid/bestAsk describe outcome index 0. When YES is index 0 they are
+// the YES book and should be attached.
+func TestNormalizeMarketBestPricesWhenYesIsIndex0(t *testing.T) {
+	raw := RawMarket{
+		ID:       "yes0",
+		Question: strPtr("Yes first"),
+		Outcomes: json.RawMessage(`["Yes", "No"]`),
+		BestBid:  numPtr("0.40"),
+		BestAsk:  numPtr("0.42"),
+	}
+	m := NormalizeMarket(raw)
+	if m.Orderbook.BestBid == nil || *m.Orderbook.BestBid != 0.40 {
+		t.Errorf("BestBid = %v, want 0.40 (YES is index 0)", m.Orderbook.BestBid)
+	}
+	if m.Orderbook.BestAsk == nil || *m.Orderbook.BestAsk != 0.42 {
+		t.Errorf("BestAsk = %v, want 0.42 (YES is index 0)", m.Orderbook.BestAsk)
+	}
+}
+
+// #5: when YES is NOT index 0, the market-level bestBid/bestAsk belong to the
+// other (No) token and must not be presented as the YES book.
+func TestNormalizeMarketBestPricesDroppedWhenYesNotIndex0(t *testing.T) {
+	raw := RawMarket{
+		ID:       "no0",
+		Question: strPtr("No first"),
+		Outcomes: json.RawMessage(`["No", "Yes"]`),
+		BestBid:  numPtr("0.40"),
+		BestAsk:  numPtr("0.42"),
+	}
+	m := NormalizeMarket(raw)
+	if m.Orderbook.BestBid != nil {
+		t.Errorf("BestBid = %v, want nil (YES is not index 0, scalar is the No token)", *m.Orderbook.BestBid)
+	}
+	if m.Orderbook.BestAsk != nil {
+		t.Errorf("BestAsk = %v, want nil (YES is not index 0, scalar is the No token)", *m.Orderbook.BestAsk)
+	}
+	if m.Orderbook.Spread != nil {
+		t.Errorf("Spread = %v, want nil when best prices are dropped", *m.Orderbook.Spread)
+	}
+}
+
 func strPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool    { return &b }
+func numPtr(s string) *json.Number {
+	n := json.Number(s)
+	return &n
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"predict-market/internal/market"
@@ -35,8 +36,22 @@ func NormalizeMarket(raw RawMarket) market.NormalizedMarket {
 		}
 	}
 
+	// Polymarket's market-level bestBid/bestAsk describe the FIRST outcome token
+	// (outcome index 0). Downstream (the arb scanner) reads orderbook.bestBid/
+	// bestAsk as the YES quote, so attaching these scalars as the YES book is only
+	// correct when YES is actually outcome index 0. Verify that before using them;
+	// if YES is at a different index (e.g. outcomes ordered ["No","Yes"]) the
+	// scalars belong to the NO token and must NOT be presented as the YES book.
 	bestAsk := jsonNumberToFloat(raw.BestAsk)
 	bestBid := jsonNumberToFloat(raw.BestBid)
+
+	yesIdx := yesOutcomeIndex(outcomeNames)
+	bestIsYes := yesIdx == 0 || (yesIdx < 0 && len(outcomeNames) <= 1)
+	if !bestIsYes {
+		// bestBid/bestAsk are not the YES side — drop them rather than mislabel.
+		bestAsk = nil
+		bestBid = nil
+	}
 
 	var spread, spreadCents *float64
 	if bestAsk != nil && bestBid != nil {
@@ -173,6 +188,17 @@ func NormalizeMarket(raw RawMarket) market.NormalizedMarket {
 		SourceUrl:       sourceUrl,
 		OrderbookTokens: orderbookTokens,
 	}
+}
+
+// yesOutcomeIndex returns the index of the "Yes" outcome (case/space-insensitive),
+// or -1 if no outcome name normalizes to "yes".
+func yesOutcomeIndex(names []string) int {
+	for i, name := range names {
+		if strings.EqualFold(strings.TrimSpace(name), "yes") {
+			return i
+		}
+	}
+	return -1
 }
 
 func parseStringArray(raw json.RawMessage) []string {
