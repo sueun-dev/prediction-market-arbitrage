@@ -23,11 +23,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "cannot find executable: %v\n", err)
 		os.Exit(1)
 	}
+	// If running from bin/, the project root is two levels up; otherwise use cwd.
 	baseDir := filepath.Dir(filepath.Dir(exePath))
-	// If running from bin/, go up one level; if running directly, use cwd
-	if filepath.Base(filepath.Dir(exePath)) == "bin" {
-		baseDir = filepath.Dir(filepath.Dir(exePath))
-	} else {
+	if filepath.Base(filepath.Dir(exePath)) != "bin" {
 		baseDir, _ = os.Getwd()
 	}
 

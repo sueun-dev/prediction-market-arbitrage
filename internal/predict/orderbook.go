@@ -41,7 +41,9 @@ func FetchOrderbookSnapshot(ctx context.Context, marketID string, timeoutMs int)
 	}
 
 	deadline := time.Now().Add(timeout)
-	conn.SetReadDeadline(deadline)
+	if err := conn.SetReadDeadline(deadline); err != nil {
+		return nil, fmt.Errorf("ws set deadline: %w", err)
+	}
 
 	for {
 		_, msgBytes, err := conn.ReadMessage()

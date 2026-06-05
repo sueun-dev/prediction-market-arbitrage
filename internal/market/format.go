@@ -23,9 +23,8 @@ func FormatDecimal(value string, decimals, precision int) string {
 		raw = value[1:]
 	}
 
-	num := new(big.Int)
-	num.SetString(raw, 10)
-	if num == nil {
+	num, ok := new(big.Int).SetString(raw, 10)
+	if !ok {
 		num = big.NewInt(0)
 	}
 
