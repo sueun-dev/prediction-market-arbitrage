@@ -7,8 +7,8 @@ import (
 
 // Run executes fn for each item in items with up to limit concurrent goroutines.
 // Results are returned in the same order as items.
-// If any task returns an error, it is stored in the result; Run itself does not
-// short-circuit (all items are processed). Use RunFailFast for early termination.
+// If any task returns an error, it is stored in the matching errs slot; Run
+// itself does not short-circuit (all items are processed).
 func Run[T any, R any](ctx context.Context, items []T, limit int, fn func(context.Context, T) (R, error)) ([]R, []error) {
 	if limit < 1 {
 		limit = 1

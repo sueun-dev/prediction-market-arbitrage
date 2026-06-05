@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"predict-market/internal/config"
@@ -24,15 +23,15 @@ var httpClient = &http.Client{
 			Timeout:   5 * time.Second,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: false},
-		MaxIdleConns:         100,
-		MaxIdleConnsPerHost:  100,
-		MaxConnsPerHost:      100,
-		IdleConnTimeout:      90 * time.Second,
-		TLSHandshakeTimeout:  5 * time.Second,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: false},
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		MaxConnsPerHost:       100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		ForceAttemptHTTP2:    true,
-		DisableCompression:   false,
+		ForceAttemptHTTP2:     true,
+		DisableCompression:    false,
 	},
 }
 
@@ -461,26 +460,6 @@ func FetchCategoryTimeseries(ctx context.Context, cfg config.Config, categoryID 
 	}
 
 	return result, nil
-}
-
-// jsonNumberToIntPtr converts a json.Number to *int.
-func jsonNumberToIntPtr(n *json.Number) *int {
-	if n == nil {
-		return nil
-	}
-	s := strings.TrimSpace(n.String())
-	if s == "" {
-		return nil
-	}
-	// Try parsing as int directly, or as float then truncate
-	if i, err := strconv.Atoi(s); err == nil {
-		return &i
-	}
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		i := int(f)
-		return &i
-	}
-	return nil
 }
 
 func jsonNumberToStringPtr(n *json.Number) *string {

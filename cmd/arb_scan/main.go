@@ -689,11 +689,3 @@ func fmtUSD(v float64) string {
 	}
 	return fmt.Sprintf("%.0f", v)
 }
-
-func truncate(s string, max int) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	if len(s) > max {
-		return s[:max-3] + "..."
-	}
-	return s
-}

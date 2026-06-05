@@ -6,11 +6,13 @@ import (
 )
 
 var (
-	apostropheRe   = regexp.MustCompile(`[''']`)
-	nonAlphaRe     = regexp.MustCompile(`[^a-z0-9]+`)
-	numberRe       = regexp.MustCompile(`\d+(\.\d+)?`)
-	wsRe           = regexp.MustCompile(`\s+`)
-	resolutionDate = regexp.MustCompile(`(?i)(?:by|before|on)\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})`)
+	apostropheRe    = regexp.MustCompile(`[''']`)
+	nonAlphaRe      = regexp.MustCompile(`[^a-z0-9]+`)
+	numberRe        = regexp.MustCompile(`\d+(\.\d+)?`)
+	wsRe            = regexp.MustCompile(`\s+`)
+	resolutionDate  = regexp.MustCompile(`(?i)(?:by|before|on)\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})`)
+	nonAlnumRe      = regexp.MustCompile(`[^a-zA-Z0-9]`)
+	nonLowerAlnumRe = regexp.MustCompile(`[^a-z0-9]`)
 )
 
 var stopwords = map[string]bool{
@@ -164,7 +166,7 @@ var monthNames = map[string]string{
 	"february": "february", "feb": "february",
 	"march": "march", "mar": "march",
 	"april": "april", "apr": "april",
-	"may": "may",
+	"may":  "may",
 	"june": "june", "jun": "june",
 	"july": "july", "jul": "july",
 	"august": "august", "aug": "august",
@@ -255,7 +257,7 @@ func ExtractSubject(text string) map[string]bool {
 		}
 		// Only include words that start with uppercase
 		if w[0] >= 'A' && w[0] <= 'Z' {
-			cleaned := strings.ToLower(regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(w, ""))
+			cleaned := strings.ToLower(nonAlnumRe.ReplaceAllString(w, ""))
 			if cleaned != "" && !subjectStopwords[cleaned] {
 				set[cleaned] = true
 			}
@@ -270,7 +272,7 @@ func ExtractSubject(text string) map[string]bool {
 // NormalizeOutcomeName normalizes an outcome name for comparison.
 func NormalizeOutcomeName(name string) string {
 	cleaned := strings.ToLower(name)
-	cleaned = regexp.MustCompile(`[^a-z0-9]`).ReplaceAllString(cleaned, "")
+	cleaned = nonLowerAlnumRe.ReplaceAllString(cleaned, "")
 	return strings.TrimSpace(cleaned)
 }
 
