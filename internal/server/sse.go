@@ -17,9 +17,21 @@ type SSEBroker struct {
 
 // SSEClient is a connected SSE client.
 type SSEClient struct {
+	// writeMu serializes all writes to w/flusher. The per-connection ping
+	// goroutine (HandleStream) and Broadcast both write to the same
+	// ResponseWriter, so without this they race on the underlying connection.
+	writeMu sync.Mutex
 	w       http.ResponseWriter
 	flusher http.Flusher
 	done    chan struct{}
+}
+
+// write sends a pre-formatted SSE chunk to the client under its write lock.
+func (c *SSEClient) write(msg string) {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	fmt.Fprint(c.w, msg)
+	c.flusher.Flush()
 }
 
 // NewSSEBroker creates a new SSE broker.
@@ -51,8 +63,7 @@ func (b *SSEBroker) HandleStream(w http.ResponseWriter, r *http.Request, hello i
 
 	// Send hello event
 	helloData, _ := json.Marshal(hello)
-	fmt.Fprintf(w, "event: hello\ndata: %s\n\n", helloData)
-	flusher.Flush()
+	client.write(fmt.Sprintf("event: hello\ndata: %s\n\n", helloData))
 
 	// Ping timer
 	ticker := time.NewTicker(time.Duration(b.pingMs) * time.Millisecond)
@@ -69,8 +80,7 @@ func (b *SSEBroker) HandleStream(w http.ResponseWriter, r *http.Request, hello i
 			close(client.done)
 			return
 		case <-ticker.C:
-			fmt.Fprint(w, ": ping\n\n")
-			flusher.Flush()
+			client.write(": ping\n\n")
 		}
 	}
 }
@@ -84,7 +94,6 @@ func (b *SSEBroker) Broadcast(event string, payload interface{}) {
 	defer b.mu.RUnlock()
 
 	for client := range b.clients {
-		fmt.Fprint(client.w, msg)
-		client.flusher.Flush()
+		client.write(msg)
 	}
 }
