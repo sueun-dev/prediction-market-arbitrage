@@ -193,8 +193,11 @@ make smoke-live
 
 Scanner:
 
-- `ARB_MIN_NET_BPS`
-- `ARB_MIN_FILL_RATIO`
+- `ARB_MIN_NET_BPS` — minimum net ROI (bps) for an opportunity to count as profitable (default 15)
+- `ARB_MIN_FILL_RATIO` — minimum simulated fill ratio per leg (default 0.99)
+- `ARB_MIN_ABS_PRICE` — minimum buy price; rejects sub-cent longshots whose bps are noise (default 0.02)
+- `ARB_MIN_NET_PER_SHARE` — minimum net $/share edge (default 0.005)
+- `ARB_MAX_QUOTE_SKEW_MS` — maximum allowed timestamp skew between the two legs' quotes, in ms (default 60000)
 
 Dashboard / refresh loop:
 
